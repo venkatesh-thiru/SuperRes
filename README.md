@@ -26,7 +26,7 @@ Our implimented DenseNet model gave mean SSIM 0.89(median) results which surpass
 
 ### Experimenting with differnt kernal sizes:
 
-1. Our first experiment is to compare the performance DEnseNet with constant kernal size and varying kernal size.
+1. Our first experiment is to compare the performance DenseNet with constant kernal size and varying kernal size.
 We consider 3X3 kernels for constant kernal size model and 7X7, 5X5, 3X3 kernals for varying kernal size model. 
 We observe that varying kernal size is gave best performance results of SSIM .90(median)
 
