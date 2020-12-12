@@ -81,7 +81,7 @@ def plot_data(dictionary):
 def save_results(ssims):
     compressed_dirs = [comp for comp in os.listdir("IXI-T1") if "Compressed" in comp]
     dictionary = dict(zip(compressed_dirs, ssims))
-    with open("ssims_constant_scale.data", "wb") as file_handle:
+    with open("ssims_3x3.data", "wb") as file_handle:
         pickle.dump(dictionary, file_handle)
     plot_data(dictionary)
 
