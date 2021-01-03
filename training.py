@@ -17,7 +17,7 @@ import pytorch_ssim
 from utils import train_test_val_split
 from pLoss.perceptual_loss import PerceptualLoss
 import multiprocessing
-
+import UNetModel
 
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
@@ -29,7 +29,8 @@ def init_weights(m):
         torch.nn.init.xavier_uniform_(m.weight)
 
 # Initializing the model
-model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
+# model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
+model = UNetModel.Unet(1,1,8).to(device)
 model.apply(init_weights)
 model = model.to(device)
 
@@ -38,19 +39,17 @@ learning_rate = 0.001
 Epochs = 50
 training_batch_size = 6
 validation_batch_size = 6
-patch_size = 32
+patch_size = 64
 samples_per_volume = 20
 max_queue_length = 80
 
 isPerceptual = True
 opt = optim.Adam(model.parameters(),lr=learning_rate)
 loss_fn = pytorch_ssim.SSIM3D(window_size=11)
-if isPerceptual:
-    pLoss_fn = PerceptualLoss().cuda()
 
 
 #setting up tensorboard
-training_name = "denseNet3D_torchIO_patch_{}_samples_{}_ADAMOptim_{}Epochs_BS{}_GlorotWeights_Perceptual_2811".format(patch_size,samples_per_volume,Epochs,training_batch_size)
+training_name = "Trial_UNet_run_0301".format(patch_size,samples_per_volume,Epochs,training_batch_size)
 train_writer = SummaryWriter(os.path.join("runs","Densenets",training_name+"_training"))
 validation_writer = SummaryWriter(os.path.join("runs","Densenets",training_name+"_validation"))
 
@@ -159,35 +158,19 @@ steps = 0
 old_validation_loss = 0
 for epoch in range(Epochs):
     overall_training_loss = []
-    if isPerceptual:
-        perceptual_list = []
-    SSIM_list = []
     for batch in tqdm(training_loader):
         steps += 1
         batch_actual = batch["ground_truth"][DATA].to(device)
         batch_compressed = batch["compressed"][DATA].to(device)
         logit = model(batch_compressed)
-        SSIMloss = 1 - loss_fn(logit,batch_actual)
-        if isPerceptual:
-            perLoss = pLoss_fn(logit,batch_actual)
-            loss = perLoss + SSIMloss
-        else:
-            loss = SSIM_loss
+        loss =  -loss_fn(logit,batch_actual)
         opt.zero_grad()
         loss.backward()
         opt.step()
-        if isPerceptual:
-            perceptual_list.append(perLoss.item())
-        overall_training_loss.append(loss.item())
-        SSIM_list.append(SSIMloss.item())
+        overall_training_loss.append(-loss.item())
         if not steps % 100:
             training_loss = statistics.mean(overall_training_loss)
-            if isPerceptual:
-                perceptual_loss = statistics.mean(perceptual_list)
-                train_writer.add_scalar("perceptual_loss", perceptual_loss, steps)
-            SSIM_loss = statistics.mean(SSIM_list)
             train_writer.add_scalar("training_loss", training_loss, steps)
-            train_writer.add_scalar("SSIM_loss",SSIM_loss,steps)
             test_network(steps)
             training_loss = statistics.mean(overall_training_loss)
             print("step {} : training_loss ===> {}".format(steps,training_loss))

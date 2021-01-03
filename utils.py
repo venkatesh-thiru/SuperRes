@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import torchio as tio
 from sklearn.model_selection import train_test_split
+from torchcomplex.nn.functional import interpolate
 
 
 def show_slices(slices):
@@ -28,21 +29,15 @@ def plot_images(inp_np,res_np):
 def train_test_val_split():
     ground_truths = Path("IXI-T1/Actual_Images")
     ground_paths = sorted(ground_truths.glob('*.nii.gz'))
-    compressed_dirs = [sorted(Path((os.path.join("IXI-T1",comp))).glob('*.nii.gz')) for comp in os.listdir("IXI-T1") if "Compressed" in comp]
-    training_subjects = []
-    test_subjects = []
-    validation_subjects = []
-    for compressed_paths in compressed_dirs:
-        subjects = []
-        for gt,comp in zip(ground_paths,compressed_paths):
-            subject = tio.Subject(
-                    ground_truth = tio.ScalarImage(gt),
-                    compressed = tio.ScalarImage(comp),
-                    )
-            subjects.append(subject)
-        train_split,test_split = train_test_split(subjects,test_size=0.3)
-        test_split,validation_split = train_test_split(test_split,test_size=0.2)
-        training_subjects += train_split
-        validation_subjects += validation_split
-        test_subjects += test_split
-    return training_subjects,test_subjects,validation_subjects
+    compressed_dirs = Path("IXI-T1/Interpolated")
+    compressed_paths = sorted(compressed_dirs.glob('*.nii.gz'))
+    subjects = []
+    for gt,comp in zip(ground_paths,compressed_paths):
+        subject = tio.Subject(
+                ground_truth = tio.ScalarImage(gt),
+                compressed = tio.ScalarImage(comp),
+                )
+        subjects.append(subject)
+    train_split,test_split = train_test_split(subjects,test_size=0.3)
+    test_split,validation_split = train_test_split(test_split,test_size=0.2)
+    return train_split,test_split,validation_split

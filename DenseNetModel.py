@@ -45,15 +45,15 @@ class DenseNet(nn.Module):
                  bottle_neck_size = 4):
         super(DenseNet, self).__init__()
         self.features = [('conv',nn.Conv3d(n_input_channel,num_init_features,
-                                           kernel_size=7,
+                                           kernel_size=3,
                                            stride =1,
-                                           padding=3,
+                                           padding=1,
                                            bias=False)),
                           ('norm1',nn.BatchNorm3d(num_init_features)),
                           ("relu",nn.ReLU(inplace=True))]
 
         self.features = nn.Sequential(OrderedDict(self.features))
-        init_kernel_size = 7
+        init_kernel_size = 3
         num_features = num_init_features
         for i,num_layers in enumerate(block_config):
             block = DenseBlock(num_layers=num_layers,
@@ -63,7 +63,7 @@ class DenseNet(nn.Module):
                                kernel_size=init_kernel_size)
             self.features.add_module("denseblock{}".format(i+1),block)
             num_features = num_features+growth_rate*num_layers
-            init_kernel_size -= 2       #kernel size increases by 2 for each dense blocks
+            # init_kernel_size -= 2       #kernel size increases by 2 for each dense blocks
             if i != len(block_config)-1:
                 transition = Transition(num_input_features=num_features,
                                         num_output_features=num_features//2)    #compression factor 0.5

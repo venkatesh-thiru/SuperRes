@@ -60,7 +60,6 @@ def generate_test_subjects():
         test_split,validation_split = train_test_split(test_split,test_size=0.2)
         global_list.append(test_split)
     return global_list
-
 def calculate_ssim(global_list):
     global_ssim = []
     for i,scale_factors in enumerate(global_list):

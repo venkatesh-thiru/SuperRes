@@ -7,7 +7,10 @@ import scipy
 from scipy.ndimage import zoom
 from fsl.data.image import Image
 from fsl.utils.image import resample
+from pathlib import Path
 import torchio as tio
+from torchio import AFFINE,DATA
+from torchcomplex.nn.functional import interpolate
 import glob
 from sklearn.model_selection import train_test_split
 import argparse
@@ -34,11 +37,11 @@ def FFT_compression(myimg,scale_factor,ifzoom):
     else:
         return resample_img[0], new_affine
 
-def write_data(compressed,scan,new_affine,scale_factor,dataset):
+def write_data(compressed,scan,new_affine,dataset):
     '''
     Helper function to write compressed image as a nifti file
     '''
-    path_name = "Compressed_{}x{}x{}_nozoom".format(scale_factor[0],scale_factor[1],scale_factor[2])
+    path_name = "Interpolated"
     target_dir = os.path.join(dataset,path_name)
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
@@ -66,24 +69,41 @@ def prepare_datasets(scale_factor,dataset = 'IXI-T1',path = "Actual_Images",ifzo
             myimg = Image(os.path.join(data_dir, scan))
             compressed,new_affine = FFT_compression(myimg,scale_factor,ifzoom)
             compressed = compressed.astype(np.int16)
-            write_data(compressed,scan,new_affine,scale_factor,dataset)
+            write_data(compressed,scan,new_affine,dataset)
         except:
             print("{} invalid input".format(scan))
     print("write finished")
 
 
+def interpolate_compressed_images(intensity="IXI-T1", method='sinc'):
+    ground_dir = os.path.join(intensity, "Actual_Images")
+    scans = os.listdir(ground_dir)
+    compressed_dir = os.path.join(intensity, "Compressed")
+    target_dir = os.path.join(intensity, "Interpolated")
+    for scan in tqdm(scans):
+        image_path = os.path.join(compressed_dir, scan)
+        source_path = os.path.join(ground_dir, scan)
+        comp_image = tio.ScalarImage(image_path)[DATA]
+        source_image = tio.ScalarImage(source_path)[DATA]
+        interpolation = interpolate(comp_image.unsqueeze(dim=0), source_image.squeeze().shape)
+        write_data(interpolation.squeeze().numpy(),scan,tio.ScalarImage(image_path)[AFFINE],intensity)
+
+
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--scale_factor",nargs="+")
-    parser.add_argument("--dataset",default="IXI-T1")
-    parser.add_argument("--path",default="Actual_Images")
-    parser.add_argument("--ifzoom",default=True,type=bool)
-    value = parser.parse_args()
-    if len(value.scale_factor) == 3:
-        scale_factor = [float(x) for x in value.scale_factor]
-        dataset = value.dataset
-        path = value.path
-        ifzoom = value.ifzoom
-        prepare_datasets(scale_factor,dataset,path,ifzoom)
-    else:
-        print("Give resolution across all dimensions")
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("--scale_factor",nargs="+")
+    # parser.add_argument("--dataset",default="IXI-T1")
+    # parser.add_argument("--path",default="Actual_Images")
+    # parser.add_argument("--ifzoom",default=True,type=bool)
+    # value = parser.parse_args()
+    # if len(value.scale_factor) == 3:
+    #     scale_factor = [float(x) for x in value.scale_factor]
+    #     dataset = value.dataset
+    #     path = value.path
+    #     ifzoom = value.ifzoom
+    #     prepare_datasets(scale_factor,dataset,path,ifzoom)
+    # else:
+    #     print("Give resolution across all dimensions")
+    interpolate_compressed_images()
