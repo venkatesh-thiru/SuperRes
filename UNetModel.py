@@ -122,10 +122,10 @@ if __name__ =="__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dimensions = 20,1,64,64,64
     x = torch.rand(dimensions)
-    x = x.to(device)
+    x = x.cuda()
     model = Unet(1,1,8)
     print(model)
-    model = model.to(device)
+    model = model.cuda()
     out = model(x)
 
     print(out.shape)

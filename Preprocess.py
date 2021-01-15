@@ -48,7 +48,7 @@ def write_data(compressed,scan,new_affine,dataset):
     compressed_img = nib.Nifti1Image(compressed.astype(np.int16),new_affine)
     compressed_img.to_filename(os.path.join(target_dir, scan))
 
-def prepare_datasets(scale_factor,dataset = 'IXI-T1',path = "Actual_Images",ifzoom=True):
+def prepare_datasets(scale_factor,dataset = 'IXI-T2',path = "Actual_Images",ifzoom=True):
     '''
     Execute this method to prepare the dataset for training. The method reads ground truth images as FSL Image objects
     compresses them and then writes them into a new directory
@@ -75,7 +75,7 @@ def prepare_datasets(scale_factor,dataset = 'IXI-T1',path = "Actual_Images",ifzo
     print("write finished")
 
 
-def interpolate_compressed_images(intensity="IXI-T1", method='sinc'):
+def interpolate_compressed_images(intensity="IXI-T2", method='sinc'):
     ground_dir = os.path.join(intensity, "Actual_Images")
     scans = os.listdir(ground_dir)
     compressed_dir = os.path.join(intensity, "Compressed")

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import torchio as tio
 from sklearn.model_selection import train_test_split
-from torchcomplex.nn.functional import interpolate
+
 
 
 def show_slices(slices):
@@ -27,9 +27,9 @@ def plot_images(inp_np,res_np):
 
 
 def train_test_val_split():
-    ground_truths = Path("IXI-T1/Actual_Images")
+    ground_truths = Path("/nfs1/ssaravan/Data/Actual_Images")
     ground_paths = sorted(ground_truths.glob('*.nii.gz'))
-    compressed_dirs = Path("IXI-T1/Interpolated")
+    compressed_dirs = Path("/nfs1/ssaravan/Data/Interpolated")
     compressed_paths = sorted(compressed_dirs.glob('*.nii.gz'))
     subjects = []
     for gt,comp in zip(ground_paths,compressed_paths):

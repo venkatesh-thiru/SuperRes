@@ -22,7 +22,7 @@ import UNetModel
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
 # torch.backends.cudnn.deterministic = True
-device = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 def init_weights(m):
     if type(m) == nn.Conv3d:
@@ -30,28 +30,30 @@ def init_weights(m):
 
 # Initializing the model
 # model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
-model = UNetModel.Unet(1,1,8).to(device)
+model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
 model.apply(init_weights)
-model = model.to(device)
+
 
 #Hyperparameters
 learning_rate = 0.001
 Epochs = 50
-training_batch_size = 6
+training_batch_size = 24
 validation_batch_size = 6
-patch_size = 64
-samples_per_volume = 20
-max_queue_length = 80
+patch_size = 48
+samples_per_volume = 30
+max_queue_length = 90
 
-isPerceptual = True
+
 opt = optim.Adam(model.parameters(),lr=learning_rate)
 loss_fn = pytorch_ssim.SSIM3D(window_size=11)
 
 
 #setting up tensorboard
-training_name = "Trial_UNet_run_0301".format(patch_size,samples_per_volume,Epochs,training_batch_size)
-train_writer = SummaryWriter(os.path.join("runs","Densenets",training_name+"_training"))
-validation_writer = SummaryWriter(os.path.join("runs","Densenets",training_name+"_validation"))
+
+path = '/nfs1/ssaravan/code/runs'
+training_name = "Trial_DenseNet_run_T2_FixedKernel_3".format(patch_size,samples_per_volume,Epochs,training_batch_size)
+train_writer = SummaryWriter(os.path.join(path,"Densenets",training_name+"_training"))
+validation_writer = SummaryWriter(os.path.join(path,"Densenets",training_name+"_validation"))
 
 #Train Test Val split
 training_subjects,test_subjects,validation_subjects = train_test_val_split()
@@ -89,7 +91,7 @@ patches_validation_set = tio.Queue(
 
 #TrainLoader initialization
 training_loader = torch.utils.data.DataLoader(
-    patches_training_set, batch_size=training_batch_size, shuffle = True)
+    patches_training_set, batch_size=training_batch_size, shuffle = True, num_workers=4)
 validation_loader = torch.utils.data.DataLoader(
     patches_validation_set, batch_size=validation_batch_size)
 
@@ -121,7 +123,7 @@ def test_network(epoch):
     aggregator = tio.inference.GridAggregator(grid_sampler,overlap_mode="average")
     with torch.no_grad():
         for batch in patch_loader:
-            inputs = batch["compressed"][DATA].to(device)
+            inputs = batch["compressed"][DATA].cuda()
             logits = model(inputs)
             location = batch[tio.LOCATION]
             aggregator.add_batch(logits,location)
@@ -142,8 +144,8 @@ def validation_loop():
     overall_validation_loss = []
     model.eval()
     for batch in validation_loader:
-        batch_actual = batch["ground_truth"][DATA].to(device)
-        batch_compressed = batch["compressed"][DATA].to(device)
+        batch_actual = batch["ground_truth"][DATA].cuda()
+        batch_compressed = batch["compressed"][DATA].cuda()
         with torch.no_grad():
             logit = model(batch_compressed)
         loss = loss_fn(logit, batch_actual)
@@ -160,8 +162,8 @@ for epoch in range(Epochs):
     overall_training_loss = []
     for batch in tqdm(training_loader):
         steps += 1
-        batch_actual = batch["ground_truth"][DATA].to(device)
-        batch_compressed = batch["compressed"][DATA].to(device)
+        batch_actual = batch["ground_truth"][DATA].cuda()
+        batch_compressed = batch["compressed"][DATA].cuda()
         logit = model(batch_compressed)
         loss =  -loss_fn(logit,batch_actual)
         opt.zero_grad()
@@ -181,6 +183,6 @@ for epoch in range(Epochs):
                     torch.save({'epoch': epoch,
                                 'model_state_dict': model.state_dict(),
                                 'optimizer_state_dict': opt.state_dict(),
-                                'loss': loss}, os.path.join("Models", training_name + ".pth"))
+                                'loss': loss}, os.path.join("/nfs1/ssaravan/code/Models", training_name + ".pth"))
                     old_validation_loss = validation_loss
                     print("model_saved")
