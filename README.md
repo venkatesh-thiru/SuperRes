@@ -67,7 +67,7 @@ The training loss was 0.034913947040747316
   ![L1 loss function for IXI-T1 dataset (200 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T1_L1_200epochs.png)
  The training loss was 0.0258860532194376
  
- ### Initial Experiments on IXI-T2 dataset
+ # Initial Experiments on IXI-T2 dataset
  
  ## Loss Function: SSIM
  
@@ -79,7 +79,7 @@ The training loss was 0.034913947040747316
  samples_per_volume = 30
  max_queue_length = 90
  
- # Training Output:
+ ### Training Output:
  
 ![SSIM-IXI-T2 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T2_SSIM_50.JPG)
 
@@ -95,7 +95,7 @@ Training loss: 0.9105
  samples_per_volume = 60
  max_queue_length = 120
  
- # Training Output:
+ ### Training Output:
  
  ![L1-IXI-T2 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T2_L1_200.JPG)
  
