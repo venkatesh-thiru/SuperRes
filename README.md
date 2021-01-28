@@ -40,6 +40,27 @@ This experiment is done considering 3 different resolution.
 
 ![Varying kernel size with  3 different scale factors experiment](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/scale_factors.png)
  
+ ### L1 loss function for IXI-T1 dataset
+ The model was trained with the following hyperparameters for IXI-T1 dataset for the L1 loss function:
+ learning_rate = 0.001
+ Epochs = 50
+ training_batch_size = 24
+ validation_batch_size = 6
+ patch_size = 48
+ samples_per_volume = 30
+ max_queue_length = 90
+ 
+ The model was trained for 50 epochs and the output was as follows
+![L1 loss function for IXI-T1 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T1_L1_50epochs.png)
 
-
-
+ To remove the grid lines which appeared in the output, following changes were made to the hyperparameters:
+ learning_rate = 0.00001
+ Epochs = 200
+ training_batch_size = 24
+ validation_batch_size = 6
+ patch_size = 48
+ samples_per_volume = 40
+ max_queue_length = 120
+ 
+  The model was trained for 200 epochs and the output was as follows
+  ![L1 loss function for IXI-T1 dataset (200 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T1_L1_200epochs.png)
