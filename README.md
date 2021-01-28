@@ -52,6 +52,7 @@ This experiment is done considering 3 different resolution.
  
  The model was trained for 50 epochs and the output was as follows
 ![L1 loss function for IXI-T1 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T1_L1_50epochs.png)
+The training loss was 0.034913947040747316
 
  To remove the grid lines which appeared in the output, following changes were made to the hyperparameters:
  learning_rate = 0.00001
@@ -64,3 +65,4 @@ This experiment is done considering 3 different resolution.
  
   The model was trained for 200 epochs and the output was as follows
   ![L1 loss function for IXI-T1 dataset (200 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T1_L1_200epochs.png)
+ The training loss was 0.0258860532194376
