@@ -17,7 +17,7 @@ The result comaparision is as follows
 
 From the results we can see that best result is SSIM .8(median) obtained from bicubic interpollation.
 
-Our implimented DenseNet model gave mean SSIM 0.89(median) results which surpassing all the classical interpollation methods.
+Our implemented DenseNet model gave mean SSIM 0.89(median) results which surpassing all the classical interpolation methods.
 
 ![Classical interpollation methods vs DenseNet](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/Example%204.png)
 ![Classical interpollation methods vs DenseNet](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/Example3.png)
