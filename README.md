@@ -81,7 +81,7 @@ The training loss was 0.034913947040747316
  
  # Training Output:
  
-![SSIM-IXI-T2 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T2_SSIM_50.jpg)
+![SSIM-IXI-T2 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T2_SSIM_50.JPG)
 
 Training loss: 0.9105
 
@@ -97,6 +97,6 @@ Training loss: 0.9105
  
  # Training Output:
  
- ![L1-IXI-T2 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T2_L1_200.jpg)
+ ![L1-IXI-T2 dataset (50 epochs)](https://github.com/v3nkyc0d3z/SuperRes/blob/master/Images/Example%20results/T2_L1_200.JPG)
  
  Training loss: 0.021400894038379192
