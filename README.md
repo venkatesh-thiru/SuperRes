@@ -71,7 +71,7 @@ The training loss was 0.034913947040747316
  
  ## Loss Function: SSIM
  
- learning_rate = 0.001
+ learning_rate = 0.001  
  Epochs = 50
  training_batch_size = 24
  validation_batch_size = 6
