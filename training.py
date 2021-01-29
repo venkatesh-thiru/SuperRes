@@ -39,13 +39,14 @@ learning_rate = 0.001
 Epochs = 50
 training_batch_size = 24
 validation_batch_size = 6
-patch_size = 64
-samples_per_volume = 20
-max_queue_length = 80
+patch_size = 48
+samples_per_volume = 30
+max_queue_length = 90
 
 
 opt = optim.Adam(model.parameters(),lr=learning_rate)
 loss_fn = pytorch_ssim.SSIM3D(window_size=11)
+# loss_fn = PerceptualLoss()
 
 
 #setting up tensorboard
@@ -56,7 +57,7 @@ train_writer = SummaryWriter(os.path.join(path,"Densenets",training_name+"_train
 validation_writer = SummaryWriter(os.path.join(path,"Densenets",training_name+"_validation"))
 
 #Train Test Val split
-training_subjects,test_subjects,validation_subjects = train_test_val_split("Train_Test_Val_split.csv","IXI-T1")
+training_subjects,test_subjects,validation_subjects = train_test_val_split("/nfs1/ssaravan/code/Train_Test_Val_split_IXI-T2.csv","IXI-T2")
 
 #Data pipeline transform
 training_transform = Compose([RescaleIntensity((0,1)),

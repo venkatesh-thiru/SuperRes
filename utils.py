@@ -67,3 +67,6 @@ def generate_train_test_val_csv(intensity):
     print(len(train_split), len(test_split), len(validation_split))
 
     df.to_csv(f"Train_Test_Val_split_{intensity}.csv", index=False)
+
+# if __name__ == "__main__":
+    # generate_train_test_val_csv("IXI-T2")

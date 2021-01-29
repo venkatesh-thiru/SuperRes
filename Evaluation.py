@@ -1,21 +1,26 @@
 import torch
+import torchio
 import matplotlib.pyplot as plt
 from utils import train_test_val_split
 import DenseNetModel
+from pathlib import Path
+from sklearn.model_selection import train_test_split
 import os
 import torchio as tio
 from torchio.transforms import Compose,RescaleIntensity
 from tqdm import tqdm
 from torchio import AFFINE,DATA
 from skimage.metrics import structural_similarity as ssim_sklearn
+import random
 import pickle
 import seaborn as sns
 import pandas as pd
 
-state_dict = torch.load("Models/DenseNet_3x3 kernels/denseNet3D_torchIO_patch_32_samples_20_ADAMOptim_50Epochs_BS6_GlorotWeights_SSIM_3X3.pth")
-model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6)).to("cuda")
+state_dict = torch.load("/nfs1/ssaravan/code/Models/Trial_DenseNet_run_T2_FixedKernel_3.pth")
+model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6)).cuda()
 model.load_state_dict(state_dict["model_state_dict"])
 test_transform = Compose([RescaleIntensity((0,1))])
+validation_batch_size = 12
 
 def test_network(sample):
     patch_size = 48,48,48
@@ -68,9 +73,9 @@ def plot_data(dictionary):
 
 
 def save_results(ssims):
-    compressed_dirs = [comp for comp in os.listdir("IXI-T1") if "Compressed" in comp]
+    compressed_dirs = ["Compressed"]
     dictionary = dict(zip(compressed_dirs, ssims))
-    with open("ssims_3x3.data", "wb") as file_handle:
+    with open("DenseNet_run_T2_FixedKernel_3.data", "wb") as file_handle:
         pickle.dump(dictionary, file_handle)
     plot_data(dictionary)
 
@@ -80,7 +85,7 @@ def read_dict(path):
     return dict
 
 if __name__ == "__main__":
-    _,test_subjects,_ = train_test_val_split("Train_Test_Val_split.csv","IXI-T1")
+    _,test_subjects,_ = train_test_val_split("/nfs1/ssaravan/code/Train_Test_Val_split_IXI-T2.csv","IXI-T2")
     ssims = calculate_ssim(test_subjects)
     save_results(ssims)
 
