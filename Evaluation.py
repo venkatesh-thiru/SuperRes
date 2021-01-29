@@ -73,8 +73,7 @@ def plot_data(dictionary):
 
 
 def save_results(ssims):
-    compressed_dirs = ["Compressed"]
-    dictionary = dict(zip(compressed_dirs, ssims))
+    dictionary = {"SSIM" : ssims}
     with open("DenseNet_run_T2_FixedKernel_3.data", "wb") as file_handle:
         pickle.dump(dictionary, file_handle)
     plot_data(dictionary)
