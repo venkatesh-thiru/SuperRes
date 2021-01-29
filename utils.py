@@ -1,8 +1,12 @@
 import matplotlib.pyplot as plt
+import numpy as np
+np.random.seed(0)
 import os
 from pathlib import Path
 import torchio as tio
 from sklearn.model_selection import train_test_split
+import pandas as pd
+
 
 
 
@@ -26,18 +30,40 @@ def plot_images(inp_np,res_np):
                  [nslice_0, nslice_1, nslice_2]])
 
 
-def train_test_val_split():
-    ground_truths = Path("/nfs1/ssaravan/Data/Actual_Images")
-    ground_paths = sorted(ground_truths.glob('*.nii.gz'))
-    compressed_dirs = Path("/nfs1/ssaravan/Data/Interpolated")
-    compressed_paths = sorted(compressed_dirs.glob('*.nii.gz'))
+def generate_subjects(file_list,intensity):
+    ground_truths = os.path.join(intensity,"Actual_Images")
+    interpolated = os.path.join(intensity,"Interpolated")
     subjects = []
-    for gt,comp in zip(ground_paths,compressed_paths):
+    for file in file_list:
+        gt_path = os.path.join(ground_truths,file)
+        int_path = os.path.join(interpolated,file)
         subject = tio.Subject(
-                ground_truth = tio.ScalarImage(gt),
-                compressed = tio.ScalarImage(comp),
-                )
+            ground_truth=tio.ScalarImage(gt_path),
+            compressed=tio.ScalarImage(int_path),
+        )
         subjects.append(subject)
-    train_split,test_split = train_test_split(subjects,test_size=0.3)
-    test_split,validation_split = train_test_split(test_split,test_size=0.2)
+    return subjects
+
+def train_test_val_split(csv_file,intensity):
+    file_df = pd.read_csv(csv_file)
+    train_files = file_df[file_df['Type'] == 'Train'].file_names.values
+    test_files = file_df[file_df['Type'] == 'Test'].file_names.values
+    val_files = file_df[file_df['Type'] == 'Validation'].file_names.values
+    train_split = generate_subjects(train_files,intensity)
+    test_split = generate_subjects(test_files, intensity)
+    validation_split = generate_subjects(val_files, intensity)
     return train_split,test_split,validation_split
+
+def generate_train_test_val_csv(intensity):
+    files = os.listdir(os.path.join(intensity,"Actual_Images"))
+    df = pd.DataFrame(files, columns=['file_names'])
+    train_split, test_split = train_test_split(files, test_size=0.3, shuffle=False)
+    test_split, validation_split = train_test_split(test_split, test_size=0.4, shuffle=False)
+
+    df.loc[df['file_names'].isin(train_split), 'Type'] = "Train"
+    df.loc[df['file_names'].isin(test_split), 'Type'] = "Test"
+    df.loc[df['file_names'].isin(validation_split), 'Type'] = "Validation"
+
+    print(len(train_split), len(test_split), len(validation_split))
+
+    df.to_csv(f"Train_Test_Val_split_{intensity}.csv", index=False)

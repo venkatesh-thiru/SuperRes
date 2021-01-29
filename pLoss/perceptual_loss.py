@@ -7,12 +7,14 @@ from pytorch_ssim import SSIM3D
 # from pytorch_msssim import SSIM,MS_SSIM
 
 class PerceptualLoss(nn.Module):
-    def __init__(self,n_level = int(5),Loss_type="SSIM3D"):
+    def __init__(self,n_level = math.inf,Loss_type="L1"):
         super(PerceptualLoss, self).__init__()
         blocks = []
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = U_Net_DeepSup().to(self.device)
-        chk = torch.load(r"pLoss/VesselSeg_UNet3d_DeepSup.pth",map_location=self.device)
+        # self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = U_Net_DeepSup().cuda()
+        model = nn.DataParallel(model)
+        # chk = torch.load(r"pLoss/VesselSeg_UNet3d_DeepSup.pth",map_location=self.device)
+        chk = torch.load(r"pLoss/VesselSeg_UNet3d_DeepSup.pth")
         model.load_state_dict(chk["state_dict"])
         blocks.append(model.Conv1.conv.eval())
         if n_level >= 2:
@@ -60,7 +62,7 @@ class PerceptualLoss(nn.Module):
         for block in self.blocks:
             x=block(x)
             y=block(y)
-            loss += 1 - self.loss_func(x,y)
+            loss += self.loss_func(x,y)
 
         return loss
 
