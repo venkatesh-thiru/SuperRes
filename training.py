@@ -15,6 +15,7 @@ import random
 import DenseNetModel
 import pytorch_ssim
 from utils import train_test_val_split
+from RRDB import RRDB
 from pLoss.perceptual_loss import PerceptualLoss
 import multiprocessing
 import UNetModel
@@ -30,7 +31,8 @@ def init_weights(m):
 
 # Initializing the model
 # model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
-model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
+# model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
+model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12).cuda()
 model.apply(init_weights)
 
 
@@ -39,9 +41,9 @@ learning_rate = 0.001
 Epochs = 50
 training_batch_size = 24
 validation_batch_size = 6
-patch_size = 48
-samples_per_volume = 30
-max_queue_length = 90
+patch_size = 32
+samples_per_volume = 60
+max_queue_length = 120
 
 
 opt = optim.Adam(model.parameters(),lr=learning_rate)
@@ -51,13 +53,13 @@ loss_fn = pytorch_ssim.SSIM3D(window_size=11)
 
 #setting up tensorboard
 
-path = '/nfs1/ssaravan/code/runs'
-training_name = "Trial_DenseNet_run_T2_FixedKernel_3".format(patch_size,samples_per_volume,Epochs,training_batch_size)
-train_writer = SummaryWriter(os.path.join(path,"Densenets",training_name+"_training"))
-validation_writer = SummaryWriter(os.path.join(path,"Densenets",training_name+"_validation"))
+path = 'runs'
+training_name = "Trial_RRDB_1X1_Fusion_T1_FixedKernel_3".format(patch_size,samples_per_volume,Epochs,training_batch_size)
+train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
+validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
 
 #Train Test Val split
-training_subjects,test_subjects,validation_subjects = train_test_val_split("/nfs1/ssaravan/code/Train_Test_Val_split_IXI-T2.csv","IXI-T2")
+training_subjects,test_subjects,validation_subjects = train_test_val_split("Train_Test_Val_split.csv","IXI-T1")
 
 #Data pipeline transform
 training_transform = Compose([RescaleIntensity((0,1)),
@@ -92,30 +94,42 @@ patches_validation_set = tio.Queue(
 
 #TrainLoader initialization
 training_loader = torch.utils.data.DataLoader(
-    patches_training_set, batch_size=training_batch_size, shuffle = True, num_workers=4)
+    patches_training_set, batch_size=training_batch_size)
 validation_loader = torch.utils.data.DataLoader(
     patches_validation_set, batch_size=validation_batch_size)
 
 
 #Generating the tensorboard plots
-def write_image(slice_list,epoch):
-    print("writing image.......")
-    fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+def write_image(slice_list,epoch,space_dict):
+    fig, ax = plt.subplots(1, 4, figsize=(20, 5))
     fig.suptitle("Epoch {}".format(epoch))
+
     ax[0].imshow(slice_list[0], interpolation='nearest', origin="lower", cmap="gray")
-    ax[0].set_title("Original")
+    ax[0].set_title("Original \n {}".format(space_dict["Actual_Image"]))
     ax[0].set_axis_off()
+
+
     ax[1].imshow(slice_list[1], interpolation='nearest', origin="lower", cmap="gray")
-    ax[1].set_title("Reduced")
+    ax[1].set_title("Downsampled \n {}".format(space_dict["Downsampled"]))
     ax[1].set_axis_off()
+
+
     ax[2].imshow(slice_list[2], interpolation='nearest', origin="lower", cmap="gray")
-    ax[2].set_title("Predicted")
+    ax[2].set_title("Interpolated")
     ax[2].set_axis_off()
+
+
+    ax[3].imshow(slice_list[3], interpolation='nearest', origin="lower", cmap="gray")
+    ax[3].set_title("Result")
+    ax[3].set_axis_off()
+
+
     train_writer.add_figure("comparison", fig, epoch)
+    print("figure added")
 
 def test_network(epoch):
     sample = random.choice(test_dataset)
-    input_tensor = sample.compressed.data[0]
+
     patch_size = 64,64,64
     patch_overlap = 4,4,4
     model.eval()
@@ -124,20 +138,33 @@ def test_network(epoch):
     aggregator = tio.inference.GridAggregator(grid_sampler,overlap_mode="average")
     with torch.no_grad():
         for batch in patch_loader:
-            inputs = batch["compressed"][DATA].cuda()
+            inputs = batch["interpolated"][DATA].cuda()
             logits = model(inputs)
             location = batch[tio.LOCATION]
             aggregator.add_batch(logits,location)
     model.train()
     result = aggregator.get_output_tensor()
-    original, compressed = torch.squeeze(sample.ground_truth["data"]), torch.squeeze(sample.compressed["data"])
+
+    downsample_path = os.path.join("IXI-T1","Compressed")
+    fname = sample.ground_truth.path.name
+    file_path = os.path.join(downsample_path,fname)
+    downsampled = tio.ScalarImage(file_path)
+    o_scale,d_scale = sample.ground_truth.spacing,downsampled.spacing
+
+    space_dict = {"Actual_Image": f"{round(o_scale[0], 2)}X{round(o_scale[1], 2)}X{round(o_scale[2], 2)}",
+                  "Downsampled": f"{round(d_scale[0], 2)}X{round(d_scale[1], 2)}X{round(d_scale[2], 2)}"}
+
+
+    original, interpolated,downsampled = torch.squeeze(sample.ground_truth["data"]), torch.squeeze(sample.interpolated["data"]), torch.squeeze(downsampled["data"])
     result = torch.squeeze(result)
-    original,compressed,result = original.detach().cpu().numpy(),compressed.detach().cpu().numpy(),result.detach().cpu().numpy()
+    original,interpolated,result,downsampled = original.detach().cpu().numpy(),interpolated.detach().cpu().numpy(),result.detach().cpu().numpy(),downsampled.numpy()
     slice_original = (original[:, :, int(original.shape[2] / 2)])
-    slice_compressed = (compressed[:, :, int(compressed.shape[2] / 2)])
+    slice_interpolated = (interpolated[:, :, int(interpolated.shape[2] / 2)])
     slice_result = (result[:, :, int(result.shape[2] / 2)])
-    slice_list = [slice_original.T,slice_compressed.T,slice_result.T]
-    write_image(slice_list,epoch)
+    slice_downsampled = (downsampled[:, :, int(downsampled.shape[2] / 2)])
+
+    slice_list = [slice_original.T,slice_downsampled.T,slice_interpolated.T,slice_result.T]
+    write_image(slice_list,epoch,space_dict)
 
 #Validation Loop
 def validation_loop():
@@ -146,9 +173,9 @@ def validation_loop():
     model.eval()
     for batch in validation_loader:
         batch_actual = batch["ground_truth"][DATA].cuda()
-        batch_compressed = batch["compressed"][DATA].cuda()
+        batch_interpolated = batch["interpolated"][DATA].cuda()
         with torch.no_grad():
-            logit = model(batch_compressed)
+            logit = model(batch_interpolated)
         loss = loss_fn(logit, batch_actual)
         overall_validation_loss.append(loss.item())
     model.train()
@@ -164,17 +191,17 @@ for epoch in range(Epochs):
     for batch in tqdm(training_loader):
         steps += 1
         batch_actual = batch["ground_truth"][DATA].cuda()
-        batch_compressed = batch["compressed"][DATA].cuda()
-        logit = model(batch_compressed)
-        loss =  -loss_fn(logit,batch_actual)
+        batch_interpolated = batch["interpolated"][DATA].cuda()
+        logit = model(batch_interpolated)
+        loss = -loss_fn(logit,batch_actual)
         opt.zero_grad()
         loss.backward()
         opt.step()
         overall_training_loss.append(-loss.item())
-        if not steps % 100:
+        if not steps % 500:
             training_loss = statistics.mean(overall_training_loss)
             train_writer.add_scalar("training_loss", training_loss, steps)
-            test_network(steps)
+            test_network(epoch)
             training_loss = statistics.mean(overall_training_loss)
             print("step {} : training_loss ===> {}".format(steps,training_loss))
             if not steps%1000 :
@@ -184,6 +211,6 @@ for epoch in range(Epochs):
                     torch.save({'epoch': epoch,
                                 'model_state_dict': model.state_dict(),
                                 'optimizer_state_dict': opt.state_dict(),
-                                'loss': loss}, os.path.join("/nfs1/ssaravan/code/Models", training_name + ".pth"))
+                                'loss': loss}, os.path.join("Models", training_name + ".pth"))
                     old_validation_loss = validation_loss
                     print("model_saved")

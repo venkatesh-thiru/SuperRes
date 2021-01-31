@@ -39,7 +39,7 @@ def generate_subjects(file_list,intensity):
         int_path = os.path.join(interpolated,file)
         subject = tio.Subject(
             ground_truth=tio.ScalarImage(gt_path),
-            compressed=tio.ScalarImage(int_path),
+            interpolated=tio.ScalarImage(int_path),
         )
         subjects.append(subject)
     return subjects
@@ -69,4 +69,4 @@ def generate_train_test_val_csv(intensity):
     df.to_csv(f"Train_Test_Val_split_{intensity}.csv", index=False)
 
 # if __name__ == "__main__":
-    # generate_train_test_val_csv("IXI-T2")
+#     generate_train_test_val("Train_Test_Val_split.csv","IXI-T1")
