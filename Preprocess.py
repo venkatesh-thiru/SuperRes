@@ -37,56 +37,59 @@ def FFT_compression(myimg,scale_factor,ifzoom):
     else:
         return resample_img[0], new_affine
 
-def write_data(compressed,scan,new_affine,dataset):
+def write_data(compressed,scan,new_affine,target_dir):
     '''
     Helper function to write compressed image as a nifti file
     '''
-    path_name = "Interpolated"
-    target_dir = os.path.join(dataset,path_name)
+    # path_name = "Interpolated"
+    # target_dir = os.path.join(dataset,path_name)
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
     compressed_img = nib.Nifti1Image(compressed.astype(np.int16),new_affine)
     compressed_img.to_filename(os.path.join(target_dir, scan))
 
-def prepare_datasets(scale_factor,dataset = 'IXI-T2',path = "Actual_Images",ifzoom=True):
-    '''
-    Execute this method to prepare the dataset for training. The method reads ground truth images as FSL Image objects
-    compresses them and then writes them into a new directory
-    PS: it is advisable to have the following folder structure
-        main
-        |_____IXI-T1(Scan Types)
-              |____Actual_Images
-    :param scale_factor: The target resolution as list
-    :param dataset: Name of the dataset
-    :param path: The subdirectory name with the ground truth images
-    :param ifzoom: set false if a NN interpolation is not required
-    :return: None
-    '''
-    data_dir = os.path.join(dataset,path)
-    scans = os.listdir(data_dir)
-    for scan in tqdm(scans):
-        try:
-            myimg = Image(os.path.join(data_dir, scan))
-            compressed,new_affine = FFT_compression(myimg,scale_factor,ifzoom)
-            compressed = compressed.astype(np.int16)
-            write_data(compressed,scan,new_affine,dataset)
-        except:
-            print("{} invalid input".format(scan))
-    print("write finished")
+# def prepare_datasets(scale_factor,dataset = 'IXI-T2',path = "Actual_Images",ifzoom=True):
+#     '''
+#     Execute this method to prepare the dataset for training. The method reads ground truth images as FSL Image objects
+#     compresses them and then writes them into a new directory
+#     PS: it is advisable to have the following folder structure
+#         main
+#         |_____IXI-T1(Scan Types)
+#               |____Actual_Images
+#     :param scale_factor: The target resolution as list
+#     :param dataset: Name of the dataset
+#     :param path: The subdirectory name with the ground truth images
+#     :param ifzoom: set false if a NN interpolation is not required
+#     :return: None
+#     '''
+#     data_dir = os.path.join(dataset,path)
+#     scans = os.listdir(data_dir)
+#     for scan in tqdm(scans):
+#         try:
+#             myimg = Image(os.path.join(data_dir, scan))
+#             compressed,new_affine = FFT_compression(myimg,scale_factor,ifzoom)
+#             compressed = compressed.astype(np.int16)
+#             write_data(compressed,scan,new_affine,dataset)
+#         except:
+#             print("{} invalid input".format(scan))
+#     print("write finished")
 
 
-def interpolate_compressed_images(intensity="IXI-T2", method='sinc'):
-    ground_dir = os.path.join(intensity, "Actual_Images")
+def interpolate_compressed_images(intensity="IXI-T2",fold = "2fold", method='sinc'):
+    ground_dir = os.path.join("DATA",intensity, "Actual_Images")
     scans = os.listdir(ground_dir)
-    compressed_dir = os.path.join(intensity, "Compressed")
-    target_dir = os.path.join(intensity, "Interpolated")
+    compressed_dir = os.path.join("DATA",intensity, "Compressed",fold)
+    target_dir = os.path.join("DATA",intensity, "Interpolated",fold)
     for scan in tqdm(scans):
         image_path = os.path.join(compressed_dir, scan)
         source_path = os.path.join(ground_dir, scan)
-        comp_image = tio.ScalarImage(image_path)[DATA]
-        source_image = tio.ScalarImage(source_path)[DATA]
-        interpolation = interpolate(comp_image.unsqueeze(dim=0), source_image.squeeze().shape)
-        write_data(interpolation.squeeze().numpy(),scan,tio.ScalarImage(image_path)[AFFINE],intensity)
+        try:
+            comp_image = tio.ScalarImage(image_path)[DATA]
+            source_image = tio.ScalarImage(source_path)[DATA]
+            interpolation = interpolate(comp_image.unsqueeze(dim=0), source_image.squeeze().shape)
+            write_data(interpolation.squeeze().numpy(),scan,tio.ScalarImage(image_path)[AFFINE],target_dir)
+        except:
+            print(f"error in source ==>{source_path}|| comp ==>{image_path}")
 
 
 

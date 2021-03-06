@@ -30,9 +30,9 @@ def plot_images(inp_np,res_np):
                  [nslice_0, nslice_1, nslice_2]])
 
 
-def generate_subjects(file_list,intensity):
-    ground_truths = os.path.join(intensity,"Actual_Images")
-    interpolated = os.path.join(intensity,"Interpolated")
+def generate_subjects(file_list,intensity,fold):
+    ground_truths = os.path.join("DATA",intensity,"Actual_Images")
+    interpolated = os.path.join("DATA",intensity,"Interpolated",fold)
     subjects = []
     for file in file_list:
         gt_path = os.path.join(ground_truths,file)
@@ -44,18 +44,18 @@ def generate_subjects(file_list,intensity):
         subjects.append(subject)
     return subjects
 
-def train_test_val_split(csv_file,intensity):
+def train_test_val_split(csv_file,intensity,fold = "2fold"):
     file_df = pd.read_csv(csv_file)
     train_files = file_df[file_df['Type'] == 'Train'].file_names.values
     test_files = file_df[file_df['Type'] == 'Test'].file_names.values
     val_files = file_df[file_df['Type'] == 'Validation'].file_names.values
-    train_split = generate_subjects(train_files,intensity)
-    test_split = generate_subjects(test_files, intensity)
-    validation_split = generate_subjects(val_files, intensity)
+    train_split = generate_subjects(train_files,intensity,fold)
+    test_split = generate_subjects(test_files, intensity,fold)
+    validation_split = generate_subjects(val_files, intensity,fold)
     return train_split,test_split,validation_split
 
 def generate_train_test_val_csv(intensity):
-    files = os.listdir(os.path.join(intensity,"Actual_Images"))
+    files = os.listdir(os.path.join("DATA",intensity,"Actual_Images"))
     df = pd.DataFrame(files, columns=['file_names'])
     train_split, test_split = train_test_split(files, test_size=0.3, shuffle=False)
     test_split, validation_split = train_test_split(test_split, test_size=0.4, shuffle=False)
@@ -68,5 +68,5 @@ def generate_train_test_val_csv(intensity):
 
     df.to_csv(f"Train_Test_Val_split_{intensity}.csv", index=False)
 
-# if __name__ == "__main__":
-#     generate_train_test_val("Train_Test_Val_split.csv","IXI-T1")
+if __name__ == "__main__":
+    train,test,val = train_test_val_split("Train_Test_Val_split.csv","IXI-T1","2d5fold")

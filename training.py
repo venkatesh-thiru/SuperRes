@@ -19,6 +19,7 @@ from RRDB import RRDB
 from pLoss.perceptual_loss import PerceptualLoss
 import multiprocessing
 import UNetModel
+import wandb
 
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
@@ -32,18 +33,26 @@ def init_weights(m):
 # Initializing the model
 # model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
 # model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
-model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12).cuda()
+model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,featureFusion=True,kernel_config=[3,3,3,3]).cuda()
 model.apply(init_weights)
 
 
 #Hyperparameters
+fold = "3d5fold"
 learning_rate = 0.001
 Epochs = 50
 training_batch_size = 24
-validation_batch_size = 6
+validation_batch_size = 24
 patch_size = 32
 samples_per_volume = 60
 max_queue_length = 120
+
+wandb.init(project="MRI_Super_Resolution",name=f'DenseNet with Feature Fusion({fold} images)' ,config={
+    "learning_rate": 0.001,
+    "architecture": "U-Net",
+    "dataset": "IXI-T1",
+    "Epochs" : 50,
+})
 
 
 opt = optim.Adam(model.parameters(),lr=learning_rate)
@@ -54,12 +63,12 @@ loss_fn = pytorch_ssim.SSIM3D(window_size=11)
 #setting up tensorboard
 
 path = 'runs'
-training_name = "Trial_RRDB_1X1_Fusion_T1_FixedKernel_3".format(patch_size,samples_per_volume,Epochs,training_batch_size)
+training_name = f"Trial_DenseNet_WithFusionTest_{fold}"
 train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
 validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
 
 #Train Test Val split
-training_subjects,test_subjects,validation_subjects = train_test_val_split("Train_Test_Val_split.csv","IXI-T1")
+training_subjects,test_subjects,validation_subjects = train_test_val_split("Train_Test_Val_split.csv","IXI-T1",fold=fold)
 
 #Data pipeline transform
 training_transform = Compose([RescaleIntensity((0,1)),
@@ -79,8 +88,8 @@ patches_training_set = tio.Queue(
     max_length=max_queue_length,
     samples_per_volume=samples_per_volume,
     sampler=tio.sampler.UniformSampler(patch_size),
-    # shuffle_subjects=True,
-    # shuffle_patches=True,
+    shuffle_subjects=True,
+    shuffle_patches=True,
 )
 
 patches_validation_set = tio.Queue(
@@ -88,8 +97,8 @@ patches_validation_set = tio.Queue(
     max_length=max_queue_length,
     samples_per_volume=samples_per_volume*2,
     sampler=tio.sampler.UniformSampler(patch_size),
-    # shuffle_subjects=False,
-    # shuffle_patches=False,
+    shuffle_subjects=False,
+    shuffle_patches=False,
 )
 
 #TrainLoader initialization
@@ -101,7 +110,7 @@ validation_loader = torch.utils.data.DataLoader(
 
 #Generating the tensorboard plots
 def write_image(slice_list,epoch,space_dict):
-    fig, ax = plt.subplots(1, 4, figsize=(20, 5))
+    fig, ax = plt.subplots(1, 4, figsize=(20, 5),dpi = 80,sharex=True, sharey=True)
     fig.suptitle("Epoch {}".format(epoch))
 
     ax[0].imshow(slice_list[0], interpolation='nearest', origin="lower", cmap="gray")
@@ -125,13 +134,14 @@ def write_image(slice_list,epoch,space_dict):
 
 
     train_writer.add_figure("comparison", fig, epoch)
+    wandb.log({f"Epoch {epoch}": fig})
     print("figure added")
 
 def test_network(epoch):
     sample = random.choice(test_dataset)
 
     patch_size = 64,64,64
-    patch_overlap = 4,4,4
+    patch_overlap = 10,10,10
     model.eval()
     grid_sampler = tio.inference.GridSampler(sample,patch_size,patch_overlap)
     patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size = 2)
@@ -145,7 +155,7 @@ def test_network(epoch):
     model.train()
     result = aggregator.get_output_tensor()
 
-    downsample_path = os.path.join("IXI-T1","Compressed")
+    downsample_path = os.path.join("DATA","IXI-T1","Compressed",fold)
     fname = sample.ground_truth.path.name
     file_path = os.path.join(downsample_path,fname)
     downsampled = tio.ScalarImage(file_path)
@@ -198,14 +208,16 @@ for epoch in range(Epochs):
         loss.backward()
         opt.step()
         overall_training_loss.append(-loss.item())
-        if not steps % 500:
+        if not steps % 100:
             training_loss = statistics.mean(overall_training_loss)
+            wandb.log({"training_loss": training_loss})
             train_writer.add_scalar("training_loss", training_loss, steps)
             test_network(epoch)
             training_loss = statistics.mean(overall_training_loss)
             print("step {} : training_loss ===> {}".format(steps,training_loss))
             if not steps%1000 :
                 validation_loss = validation_loop()
+                wandb.log({"validation_loss": validation_loss})
                 validation_writer.add_scalar("validation_loss", validation_loss, steps)
                 if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
                     torch.save({'epoch': epoch,

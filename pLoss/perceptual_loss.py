@@ -11,9 +11,10 @@ class PerceptualLoss(nn.Module):
         super(PerceptualLoss, self).__init__()
         blocks = []
         # self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        map_location = lambda storage, loc: storage.cuda()
         model = U_Net_DeepSup().cuda()
-        model = nn.DataParallel(model)
-        # chk = torch.load(r"pLoss/VesselSeg_UNet3d_DeepSup.pth",map_location=self.device)
+        # model = nn.DataParallel(model)
+        chk = torch.load(r"pLoss/VesselSeg_UNet3d_DeepSup.pth",map_location=map_location)
         chk = torch.load(r"pLoss/VesselSeg_UNet3d_DeepSup.pth")
         model.load_state_dict(chk["state_dict"])
         blocks.append(model.Conv1.conv.eval())
