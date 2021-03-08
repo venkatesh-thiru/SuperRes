@@ -208,21 +208,20 @@ for epoch in range(Epochs):
         loss.backward()
         opt.step()
         overall_training_loss.append(-loss.item())
-        if not steps % 100:
-            training_loss = statistics.mean(overall_training_loss)
-            wandb.log({"training_loss": training_loss})
-            train_writer.add_scalar("training_loss", training_loss, steps)
-            test_network(epoch)
-            training_loss = statistics.mean(overall_training_loss)
-            print("step {} : training_loss ===> {}".format(steps,training_loss))
-            if not steps%1000 :
-                validation_loss = validation_loop()
-                wandb.log({"validation_loss": validation_loss})
-                validation_writer.add_scalar("validation_loss", validation_loss, steps)
-                if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
-                    torch.save({'epoch': epoch,
-                                'model_state_dict': model.state_dict(),
-                                'optimizer_state_dict': opt.state_dict(),
-                                'loss': loss}, os.path.join("Models", training_name + ".pth"))
-                    old_validation_loss = validation_loss
-                    print("model_saved")
+
+    training_loss = statistics.mean(overall_training_loss)
+    wandb.log({"training_loss": training_loss})
+    train_writer.add_scalar("training_loss", training_loss, steps)
+    test_network(epoch)
+    training_loss = statistics.mean(overall_training_loss)
+    print("step {} : training_loss ===> {}".format(steps,training_loss))
+    validation_loss = validation_loop()
+    wandb.log({"validation_loss": validation_loss})
+    validation_writer.add_scalar("validation_loss", validation_loss, steps)
+    if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
+        torch.save({'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': opt.state_dict(),
+                    'loss': loss}, os.path.join("Models", training_name + ".pth"))
+        old_validation_loss = validation_loss
+        print("model_saved")
