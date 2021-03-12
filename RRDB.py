@@ -8,7 +8,9 @@ class make_dense(nn.Module):
     def __init__(self,nChannels,GrowthRate,kernel_size=3):
         super(make_dense,self).__init__()
         self.conv = nn.Conv3d(nChannels,GrowthRate,kernel_size=kernel_size,padding=(kernel_size-1)//2,bias=True)
+        # self.norm = nn.BatchNorm3d(nChannels)
     def forward(self,x):
+        # out = self.norm(x)
         out = F.relu(self.conv(x))
         out = torch.cat([x,out],dim=1)
         return out

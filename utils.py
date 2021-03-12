@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 np.random.seed(0)
 import os
-from pathlib import Path
 import torchio as tio
 from sklearn.model_selection import train_test_split
 import pandas as pd
@@ -30,9 +29,9 @@ def plot_images(inp_np,res_np):
                  [nslice_0, nslice_1, nslice_2]])
 
 
-def generate_subjects(file_list,intensity,fold):
-    ground_truths = os.path.join("DATA",intensity,"Actual_Images")
-    interpolated = os.path.join("DATA",intensity,"Interpolated",fold)
+def generate_subjects(file_list,intensity,fold,path):
+    ground_truths = os.path.join(path,intensity,"Actual_Images")
+    interpolated = os.path.join(path,intensity,"Interpolated",fold)
     subjects = []
     for file in file_list:
         gt_path = os.path.join(ground_truths,file)
@@ -44,14 +43,14 @@ def generate_subjects(file_list,intensity,fold):
         subjects.append(subject)
     return subjects
 
-def train_test_val_split(csv_file,intensity,fold = "2fold"):
+def train_test_val_split(csv_file,path,intensity,fold = "2fold"):
     file_df = pd.read_csv(csv_file)
     train_files = file_df[file_df['Type'] == 'Train'].file_names.values
     test_files = file_df[file_df['Type'] == 'Test'].file_names.values
     val_files = file_df[file_df['Type'] == 'Validation'].file_names.values
-    train_split = generate_subjects(train_files,intensity,fold)
-    test_split = generate_subjects(test_files, intensity,fold)
-    validation_split = generate_subjects(val_files, intensity,fold)
+    train_split = generate_subjects(train_files,intensity,fold,path)
+    test_split = generate_subjects(test_files, intensity,fold,path)
+    validation_split = generate_subjects(val_files, intensity,fold,path)
     return train_split,test_split,validation_split
 
 def generate_train_test_val_csv(intensity):
@@ -69,4 +68,4 @@ def generate_train_test_val_csv(intensity):
     df.to_csv(f"Train_Test_Val_split_{intensity}.csv", index=False)
 
 if __name__ == "__main__":
-    train,test,val = train_test_val_split("Train_Test_Val_split.csv","IXI-T1","2d5fold")
+    train,test,val = train_test_val_split("Train_Test_Val_split_IXI-T1.csv", "IXI-T1", "2d5fold")

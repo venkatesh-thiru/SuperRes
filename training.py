@@ -1,10 +1,7 @@
 import torchio as tio
 from torchio import AFFINE,DATA
-from tqdm import tqdm
 import torch
-import torchvision
 import os
-import numpy as np
 import matplotlib.pyplot as plt
 import torch.optim as optim
 import torch.nn as nn
@@ -12,14 +9,13 @@ from torch.utils.tensorboard import SummaryWriter
 from torchio.transforms import Compose,ZNormalization,RescaleIntensity,RandomNoise
 import statistics
 import random
-import DenseNetModel
-import pytorch_ssim
 from utils import train_test_val_split
 from RRDB import RRDB
 from pLoss.perceptual_loss import PerceptualLoss
-import multiprocessing
-import UNetModel
+from tqdm import tqdm
+import pytorch_ssim
 import wandb
+from wandb import AlertLevel
 
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
@@ -37,8 +33,11 @@ model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,featureFusion=
 model.apply(init_weights)
 
 
+
+
 #Hyperparameters
-fold = "3d5fold"
+fold = "2fold"
+loss_function = "L1"
 learning_rate = 0.001
 Epochs = 50
 training_batch_size = 24
@@ -47,28 +46,52 @@ patch_size = 32
 samples_per_volume = 60
 max_queue_length = 120
 
-wandb.init(project="MRI_Super_Resolution",name=f'DenseNet with Feature Fusion({fold} images)' ,config={
+if loss_function == 'SSIM':
+    loss_fn = pytorch_ssim.SSIM3D(window_size=11).cuda()
+    learning_rate = 0.001
+elif loss_function == 'L1':
+    loss_fn = torch.nn.L1Loss()
+    learning_rate = 0.00001
+elif loss_function == 'perceptual_SSIM':
+    loss_fn = PerceptualLoss(Loss_type="SSIM3D")
+    learning_rate = 0.00001
+elif loss_function == 'perceptual_L1':
+    loss_fn = PerceptualLoss(Loss_type="L1")
+    learning_rate = 0.00001
+
+#Train Test Val split
+'''
+Do not forget to change things here
+'''
+code_path = ""
+data_dir = "DATA"
+data_path = os.path.join(code_path,data_dir)
+csv_path = os.path.join(code_path,"Train_Test_Val_split_IXI-T1.csv")
+training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path = data_path,intensity="IXI-T1",fold=fold)
+
+#setting up tensorboard
+
+path = 'runs'
+training_name = f"Test_Ignore_{fold}_{loss_function}"
+train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
+validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
+
+
+
+wandb.init(project="MRI_Super_Resolution",name=training_name ,config={
     "learning_rate": 0.001,
     "architecture": "U-Net",
     "dataset": "IXI-T1",
     "Epochs" : 50,
 })
-
+wandb.alert(title = f"Training Began ",
+            level = AlertLevel.INFO,
+            text = f"GPU Started executing job ==> {training_name}")
 
 opt = optim.Adam(model.parameters(),lr=learning_rate)
-loss_fn = pytorch_ssim.SSIM3D(window_size=11)
-# loss_fn = PerceptualLoss()
 
 
-#setting up tensorboard
 
-path = 'runs'
-training_name = f"Trial_DenseNet_WithFusionTest_{fold}"
-train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
-validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
-
-#Train Test Val split
-training_subjects,test_subjects,validation_subjects = train_test_val_split("Train_Test_Val_split.csv","IXI-T1",fold=fold)
 
 #Data pipeline transform
 training_transform = Compose([RescaleIntensity((0,1)),
@@ -139,7 +162,6 @@ def write_image(slice_list,epoch,space_dict):
 
 def test_network(epoch):
     sample = random.choice(test_dataset)
-
     patch_size = 64,64,64
     patch_overlap = 10,10,10
     model.eval()
@@ -155,7 +177,7 @@ def test_network(epoch):
     model.train()
     result = aggregator.get_output_tensor()
 
-    downsample_path = os.path.join("DATA","IXI-T1","Compressed",fold)
+    downsample_path = os.path.join(data_path,"IXI-T1","Compressed",fold)
     fname = sample.ground_truth.path.name
     file_path = os.path.join(downsample_path,fname)
     downsampled = tio.ScalarImage(file_path)
@@ -203,25 +225,44 @@ for epoch in range(Epochs):
         batch_actual = batch["ground_truth"][DATA].cuda()
         batch_interpolated = batch["interpolated"][DATA].cuda()
         logit = model(batch_interpolated)
-        loss = -loss_fn(logit,batch_actual)
+        if loss_function == "SSIM":
+            loss = -loss_fn(logit,batch_actual)
+            overall_training_loss.append(-loss.item())
+        else:
+            loss = loss_fn(logit, batch_actual)
+            overall_training_loss.append(loss.item())
         opt.zero_grad()
         loss.backward()
         opt.step()
-        overall_training_loss.append(-loss.item())
 
+
+    #Train Loss and validation loss seggregation
     training_loss = statistics.mean(overall_training_loss)
-    wandb.log({"training_loss": training_loss})
-    train_writer.add_scalar("training_loss", training_loss, steps)
     test_network(epoch)
-    training_loss = statistics.mean(overall_training_loss)
-    print("step {} : training_loss ===> {}".format(steps,training_loss))
     validation_loss = validation_loop()
-    wandb.log({"validation_loss": validation_loss})
-    validation_writer.add_scalar("validation_loss", validation_loss, steps)
-    if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
-        torch.save({'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': opt.state_dict(),
-                    'loss': loss}, os.path.join("Models", training_name + ".pth"))
-        old_validation_loss = validation_loss
-        print("model_saved")
+    print(f"epoch {epoch} : training_loss ===> {training_loss} || Validation_loss ===> {validation_loss} \n")
+
+    # wandb logging
+    wandb.log({"validation_loss": validation_loss,"epoch" : epoch})
+    wandb.log({"training_loss": training_loss,"epoch" : epoch})
+
+    # tensorboard logging
+    train_writer.add_scalar("training_loss", training_loss, epoch)
+    validation_writer.add_scalar("validation_loss", validation_loss, epoch)
+
+    # model saving
+    if loss_function == 'SSIM':
+        if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
+            torch.save({'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'loss': loss}, os.path.join(r"Models", training_name + ".pth"))
+            print("model_saved")
+    else:
+        if (old_validation_loss == 0) or (old_validation_loss > validation_loss):
+            torch.save({'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'loss': loss}, os.path.join(r"Models", training_name + ".pth"))
+            print("model_saved")
+    old_validation_loss = validation_loss
