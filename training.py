@@ -16,6 +16,7 @@ from tqdm import tqdm
 import pytorch_ssim
 import wandb
 from wandb import AlertLevel
+from MultiScaleExperiment import MultiScale
 
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
@@ -29,15 +30,12 @@ def init_weights(m):
 # Initializing the model
 # model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
 # model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
-model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,featureFusion=True,kernel_config=[3,3,3,3]).cuda()
+# model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,featureFusion=True,kernel_config=[3,3,3,3]).cuda()
+model = MultiScale(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12).cuda()
 model.apply(init_weights)
-
-
-
-
 #Hyperparameters
 fold = "2fold"
-loss_function = "L1"
+loss_function = 'SSIM'
 learning_rate = 0.001
 Epochs = 50
 training_batch_size = 24
@@ -72,15 +70,13 @@ training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_p
 #setting up tensorboard
 
 path = 'runs'
-training_name = f"Test_Ignore_{fold}_{loss_function}"
+training_name = f"Venky_multiScaleModel_test_{fold}_{loss_function}"
 train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
 validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
 
-
-
 wandb.init(project="MRI_Super_Resolution",name=training_name ,config={
     "learning_rate": 0.001,
-    "architecture": "U-Net",
+    "architecture": "MultiScaleFusion",
     "dataset": "IXI-T1",
     "Epochs" : 50,
 })
@@ -89,9 +85,6 @@ wandb.alert(title = f"Training Began ",
             text = f"GPU Started executing job ==> {training_name}")
 
 opt = optim.Adam(model.parameters(),lr=learning_rate)
-
-
-
 
 #Data pipeline transform
 training_transform = Compose([RescaleIntensity((0,1)),
@@ -103,7 +96,6 @@ test_transform = Compose([RescaleIntensity((0,1))])
 training_dataset = tio.SubjectsDataset(training_subjects,transform=training_transform)
 validation_dataset = tio.SubjectsDataset(validation_subjects,transform=validation_transform)
 test_dataset = tio.SubjectsDataset(test_subjects,transform=test_transform)
-
 
 #Patcher initialization
 patches_training_set = tio.Queue(
@@ -130,7 +122,6 @@ training_loader = torch.utils.data.DataLoader(
 validation_loader = torch.utils.data.DataLoader(
     patches_validation_set, batch_size=validation_batch_size)
 
-
 #Generating the tensorboard plots
 def write_image(slice_list,epoch,space_dict):
     fig, ax = plt.subplots(1, 4, figsize=(20, 5),dpi = 80,sharex=True, sharey=True)
@@ -140,21 +131,17 @@ def write_image(slice_list,epoch,space_dict):
     ax[0].set_title("Original \n {}".format(space_dict["Actual_Image"]))
     ax[0].set_axis_off()
 
-
     ax[1].imshow(slice_list[1], interpolation='nearest', origin="lower", cmap="gray")
     ax[1].set_title("Downsampled \n {}".format(space_dict["Downsampled"]))
     ax[1].set_axis_off()
-
 
     ax[2].imshow(slice_list[2], interpolation='nearest', origin="lower", cmap="gray")
     ax[2].set_title("Interpolated")
     ax[2].set_axis_off()
 
-
     ax[3].imshow(slice_list[3], interpolation='nearest', origin="lower", cmap="gray")
     ax[3].set_title("Result")
     ax[3].set_axis_off()
-
 
     train_writer.add_figure("comparison", fig, epoch)
     wandb.log({f"Epoch {epoch}": fig})
@@ -176,17 +163,13 @@ def test_network(epoch):
             aggregator.add_batch(logits,location)
     model.train()
     result = aggregator.get_output_tensor()
-
     downsample_path = os.path.join(data_path,"IXI-T1","Compressed",fold)
     fname = sample.ground_truth.path.name
     file_path = os.path.join(downsample_path,fname)
     downsampled = tio.ScalarImage(file_path)
     o_scale,d_scale = sample.ground_truth.spacing,downsampled.spacing
-
     space_dict = {"Actual_Image": f"{round(o_scale[0], 2)}X{round(o_scale[1], 2)}X{round(o_scale[2], 2)}",
                   "Downsampled": f"{round(d_scale[0], 2)}X{round(d_scale[1], 2)}X{round(d_scale[2], 2)}"}
-
-
     original, interpolated,downsampled = torch.squeeze(sample.ground_truth["data"]), torch.squeeze(sample.interpolated["data"]), torch.squeeze(downsampled["data"])
     result = torch.squeeze(result)
     original,interpolated,result,downsampled = original.detach().cpu().numpy(),interpolated.detach().cpu().numpy(),result.detach().cpu().numpy(),downsampled.numpy()
@@ -194,10 +177,8 @@ def test_network(epoch):
     slice_interpolated = (interpolated[:, :, int(interpolated.shape[2] / 2)])
     slice_result = (result[:, :, int(result.shape[2] / 2)])
     slice_downsampled = (downsampled[:, :, int(downsampled.shape[2] / 2)])
-
     slice_list = [slice_original.T,slice_downsampled.T,slice_interpolated.T,slice_result.T]
     write_image(slice_list,epoch,space_dict)
-
 #Validation Loop
 def validation_loop():
     print(("validating......."))
@@ -213,8 +194,6 @@ def validation_loop():
     model.train()
     validation_loss = statistics.mean(overall_validation_loss)
     return validation_loss
-
-
 #Training loop
 steps = 0
 old_validation_loss = 0
@@ -234,22 +213,17 @@ for epoch in range(Epochs):
         opt.zero_grad()
         loss.backward()
         opt.step()
-
-
     #Train Loss and validation loss seggregation
     training_loss = statistics.mean(overall_training_loss)
     test_network(epoch)
     validation_loss = validation_loop()
     print(f"epoch {epoch} : training_loss ===> {training_loss} || Validation_loss ===> {validation_loss} \n")
-
     # wandb logging
     wandb.log({"validation_loss": validation_loss,"epoch" : epoch})
     wandb.log({"training_loss": training_loss,"epoch" : epoch})
-
     # tensorboard logging
     train_writer.add_scalar("training_loss", training_loss, epoch)
     validation_writer.add_scalar("validation_loss", validation_loss, epoch)
-
     # model saving
     if loss_function == 'SSIM':
         if (old_validation_loss == 0) or (old_validation_loss < validation_loss):

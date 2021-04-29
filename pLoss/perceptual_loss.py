@@ -52,7 +52,7 @@ class PerceptualLoss(nn.Module):
                 parms.requires_grad = False
         self.blocks = nn.ModuleList(blocks)
         if Loss_type == "SSIM3D":
-            self.loss_func = SSIM3D(window_size=11).to(self.device)
+            self.loss_func = SSIM3D(window_size=11).cuda()
             # self.loss_func = SSIM3D(window_size=11)
         elif Loss_type == "L1":
             self.loss_func = torch.nn.functional.l1_loss
