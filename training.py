@@ -17,6 +17,7 @@ import pytorch_ssim
 import wandb
 from wandb import AlertLevel
 from MultiScaleExperiment import MultiScale
+from ShuffleUNet.net import ShuffleUNet
 
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
@@ -31,15 +32,17 @@ def init_weights(m):
 # model = DenseNetModel.DenseNet(num_init_features=4,growth_rate=6,block_config=(6,6,6))
 # model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
 # model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,featureFusion=True,kernel_config=[3,3,3,3]).cuda()
-model = MultiScale(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12).cuda()
+# model = MultiScale(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12).cuda()
+model = ShuffleUNet().cuda()
+
 model.apply(init_weights)
 #Hyperparameters
 fold = "2fold"
-loss_function = 'SSIM'
+loss_function = 'SSIM_INV'
 learning_rate = 0.001
 Epochs = 50
-training_batch_size = 24
-validation_batch_size = 24
+training_batch_size = 9
+validation_batch_size = 9
 patch_size = 32
 samples_per_volume = 60
 max_queue_length = 120
@@ -56,6 +59,9 @@ elif loss_function == 'perceptual_SSIM':
 elif loss_function == 'perceptual_L1':
     loss_fn = PerceptualLoss(Loss_type="L1")
     learning_rate = 0.00001
+if loss_function == 'SSIM_INV':
+    loss_fn = pytorch_ssim.SSIM3D(window_size=11)
+    learning_rate = 0.001
 
 #Train Test Val split
 '''
@@ -65,18 +71,21 @@ code_path = ""
 data_dir = "DATA"
 data_path = os.path.join(code_path,data_dir)
 csv_path = os.path.join(code_path,"Train_Test_Val_split_IXI-T1.csv")
-training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path = data_path,intensity="IXI-T1",fold=fold)
+
+folders = ["2d5fold", "2fold", "3d5fold", "3fold", "4fold"]
+training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path =  data_path, intensity = "IXI-T1", folders =folders, repeat=2)
+# training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path = data_path,intensity="IXI-T1",fold=fold)
 
 #setting up tensorboard
 
 path = 'runs'
-training_name = f"Venky_multiScaleModel_test_{fold}_{loss_function}"
+training_name = f"Venky_shuffleUnet_test_{fold}_{loss_function}"
 train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
 validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
 
-wandb.init(project="MRI_Super_Resolution",name=training_name ,config={
+wandb.init(project="personals",name=training_name ,config={
     "learning_rate": 0.001,
-    "architecture": "MultiScaleFusion",
+    "architecture": "ShuffleUnet",
     "dataset": "IXI-T1",
     "Epochs" : 50,
 })
@@ -208,7 +217,7 @@ for epoch in range(Epochs):
             loss = -loss_fn(logit,batch_actual)
             overall_training_loss.append(-loss.item())
         else:
-            loss = loss_fn(logit, batch_actual)
+            loss = 1-loss_fn(logit, batch_actual)
             overall_training_loss.append(loss.item())
         opt.zero_grad()
         loss.backward()

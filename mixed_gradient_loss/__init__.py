@@ -33,7 +33,7 @@ def _generate_edges(image,filterx,filtery,filterz):
     dy = F.conv3d(image, weight=filtery, padding=(kernel_size - 1) // 2, stride=1)
     dz = F.conv3d(image, weight=filterz, padding=(kernel_size - 1) // 2, stride=1)
 
-    edge = dx**2 + dy**2 + dz**2
+    edge = torch.sqrt(dx**2 + dy**2 + dz**2)
 
     return edge
 
