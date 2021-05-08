@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-np.random.seed(42)
 import os
 import torchio as tio
 from sklearn.model_selection import train_test_split
@@ -34,7 +33,9 @@ def generate_subjects(file_list,intensity,folders,path,repeats = 2):
     ground_truths = os.path.join(path,intensity,"Actual_Images")
     plist = [1/len(folders) for i in range(0,len(folders))]
     subjects = []
+    seed_number = 42
     for i in range(0,repeats):
+        np.random.seed(seed_number)
         interpolated_list = []
         fold_list = []
         for file in file_list:
@@ -51,6 +52,7 @@ def generate_subjects(file_list,intensity,folders,path,repeats = 2):
                 interpolated=tio.ScalarImage(int_path),
             )
             subjects.append(subject)
+        seed_number += 1
     return subjects
 
 
