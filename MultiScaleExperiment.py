@@ -44,10 +44,10 @@ class MultiScale(nn.Module):
 
         #First Convolution
         self.C1 = nn.Conv3d(nChannels_, nInitFeat_, kernel_size=kernel_config[0], padding=(kernel_config[0] - 1) // 2,bias=True)
-        self.RDB1 = RDB(nInitFeat_,target_features, nDenseLayers_, GrowthRate_, kernel_config[0])
+        self.RDB1 = RDB(nInitFeat_,target_features, nDenseLayers_, 6, kernel_config[0])
 
         self.C2 = nn.Conv3d(nChannels_, nInitFeat_, kernel_size=kernel_config[1], padding=(kernel_config[1] - 1) // 2,bias=True)
-        self.RDB2 = RDB(nInitFeat_,target_features, nDenseLayers_, GrowthRate_, kernel_config[1])
+        self.RDB2 = RDB(nInitFeat_,target_features, nDenseLayers_, 6, kernel_config[1])
 
         self.C3 = nn.Conv3d(nChannels_, nInitFeat_, kernel_size=kernel_config[2], padding=(kernel_config[2] - 1) // 2,bias=True)
         self.RDB3 = RDB(nInitFeat_,target_features, nDenseLayers_, GrowthRate_, kernel_config[2])
