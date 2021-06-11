@@ -46,13 +46,13 @@ def init_weights(m):
 
 #Hyperparameters
 hyper_batch_size = 22
-loss_function = "SSIM"
+loss_function = "L1"
 model_kind = "RRDB"
 image_intensity = "IXI-T1"
 Epochs = 50
-training_batch_size = 11
-validation_batch_size = 11
-patch_size = 32
+training_batch_size = 22
+validation_batch_size = 22
+patch_size = 64
 samples_per_volume = 60
 max_queue_length = 120
 accumulation_steps = ceil(hyper_batch_size/training_batch_size)
@@ -75,7 +75,7 @@ elif loss_function == 'perceptual_L1':
 '''
 Do not forget to change things here
 '''
-code_path = ""
+code_path = "/nfs1/cheepina/code"
 data_dir = "DATA"
 data_path = os.path.join(code_path,data_dir)
 csv_path = os.path.join(code_path,"Train_Test_Val_split_IXI-T1.csv")
@@ -87,7 +87,7 @@ training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_p
 #setting up tensorboard
 
 path = 'runs'
-training_name = f"Venky_testing validation_{loss_function}"
+training_name = f"mayura_RRDB_{loss_function}"
 train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
 validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
 
@@ -109,8 +109,7 @@ scheduler = ReduceLROnPlateau(opt,'min',patience=10)
 scaler = GradScaler()
 
 #Data pipeline transform
-training_transform = Compose([RescaleIntensity((0,1)),
-                              RandomNoise(p=0.05)])
+training_transform = Compose([RescaleIntensity((0,1))])
 validation_transform = Compose([RescaleIntensity((0,1))])
 test_transform = Compose([RescaleIntensity((0,1))])
 
