@@ -16,8 +16,14 @@ from tqdm import tqdm
 import pytorch_ssim
 import wandb
 from wandb import AlertLevel
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from MultiScaleExperiment import MultiScale
+from math import ceil, floor
 from ShuffleUNet.net import ShuffleUNet
+from torch.cuda.amp import autocast,GradScaler
+from Evaluation import load_model_weights
+
+torch.manual_seed(42)
 
 torch.cuda.empty_cache()
 # torch.backends.cudnn.benchmark = True
@@ -33,35 +39,37 @@ def init_weights(m):
 # model = DenseNetModel.DenseNet(num_init_features=12,growth_rate=7,block_config=(6,6,6)).cuda()
 # model = RRDB(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,featureFusion=True,kernel_config=[3,3,3,3]).cuda()
 # model = MultiScale(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12).cuda()
-model = ShuffleUNet().cuda()
 
-model.apply(init_weights)
+# model = ShuffleUNet().cuda()
+
+
+
 #Hyperparameters
-fold = "2fold"
-loss_function = 'SSIM_INV'
-learning_rate = 0.001
+hyper_batch_size = 22
+loss_function = "SSIM"
+model_kind = "RRDB"
+image_intensity = "IXI-T1"
 Epochs = 50
-training_batch_size = 9
-validation_batch_size = 9
+training_batch_size = 11
+validation_batch_size = 11
 patch_size = 32
 samples_per_volume = 60
 max_queue_length = 120
+accumulation_steps = ceil(hyper_batch_size/training_batch_size)
 
 if loss_function == 'SSIM':
     loss_fn = pytorch_ssim.SSIM3D(window_size=11).cuda()
-    learning_rate = 0.001
+    learning_rate = 0.0001
 elif loss_function == 'L1':
     loss_fn = torch.nn.L1Loss()
-    learning_rate = 0.00001
+    learning_rate = 0.0001
 elif loss_function == 'perceptual_SSIM':
     loss_fn = PerceptualLoss(Loss_type="SSIM3D")
-    learning_rate = 0.00001
+    learning_rate = 0.0001
 elif loss_function == 'perceptual_L1':
     loss_fn = PerceptualLoss(Loss_type="L1")
-    learning_rate = 0.00001
-if loss_function == 'SSIM_INV':
-    loss_fn = pytorch_ssim.SSIM3D(window_size=11)
-    learning_rate = 0.001
+    learning_rate = 0.0001
+
 
 #Train Test Val split
 '''
@@ -73,27 +81,32 @@ data_path = os.path.join(code_path,data_dir)
 csv_path = os.path.join(code_path,"Train_Test_Val_split_IXI-T1.csv")
 
 folders = ["2d5fold", "2fold", "3d5fold", "3fold", "4fold"]
-training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path =  data_path, intensity = "IXI-T1", folders =folders, repeat=2)
+training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path =  data_path, intensity = image_intensity, folders =folders, repeats=2)
 # training_subjects,test_subjects,validation_subjects = train_test_val_split(csv_path,path = data_path,intensity="IXI-T1",fold=fold)
 
 #setting up tensorboard
 
 path = 'runs'
-training_name = f"Venky_shuffleUnet_test_{fold}_{loss_function}"
+training_name = f"Venky_testing validation_{loss_function}"
 train_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_training"))
 validation_writer = SummaryWriter(os.path.join(path,"RRDB",training_name+"_validation"))
 
 wandb.init(project="personals",name=training_name ,config={
-    "learning_rate": 0.001,
-    "architecture": "ShuffleUnet",
-    "dataset": "IXI-T1",
-    "Epochs" : 50,
+    "learning_rate": learning_rate,
+    "architecture": model_kind,
+    "dataset": image_intensity,
+    "Epochs" : Epochs,
 })
 wandb.alert(title = f"Training Began ",
             level = AlertLevel.INFO,
             text = f"GPU Started executing job ==> {training_name}")
 
+
+model = load_model_weights(kind = model_kind)
+model.apply(init_weights)
 opt = optim.Adam(model.parameters(),lr=learning_rate)
+scheduler = ReduceLROnPlateau(opt,'min',patience=10)
+scaler = GradScaler()
 
 #Data pipeline transform
 training_transform = Compose([RescaleIntensity((0,1)),
@@ -172,6 +185,7 @@ def test_network(epoch):
             aggregator.add_batch(logits,location)
     model.train()
     result = aggregator.get_output_tensor()
+    fold = os.path.split(os.path.split(sample.interpolated.path)[0])[1]
     downsample_path = os.path.join(data_path,"IXI-T1","Compressed",fold)
     fname = sample.ground_truth.path.name
     file_path = os.path.join(downsample_path,fname)
@@ -188,6 +202,7 @@ def test_network(epoch):
     slice_downsampled = (downsampled[:, :, int(downsampled.shape[2] / 2)])
     slice_list = [slice_original.T,slice_downsampled.T,slice_interpolated.T,slice_result.T]
     write_image(slice_list,epoch,space_dict)
+
 #Validation Loop
 def validation_loop():
     print(("validating......."))
@@ -198,30 +213,41 @@ def validation_loop():
         batch_interpolated = batch["interpolated"][DATA].cuda()
         with torch.no_grad():
             logit = model(batch_interpolated)
-        loss = loss_fn(logit, batch_actual)
+        if loss_function == "SSIM":
+            loss = 1-loss_fn(logit, batch_actual)
+        else:
+            loss = loss_fn(logit, batch_actual)
         overall_validation_loss.append(loss.item())
     model.train()
     validation_loss = statistics.mean(overall_validation_loss)
     return validation_loss
+
 #Training loop
 steps = 0
 old_validation_loss = 0
 for epoch in range(Epochs):
     overall_training_loss = []
-    for batch in tqdm(training_loader):
+    opt.zero_grad()
+    for i,batch in enumerate(tqdm(training_loader)):
         steps += 1
         batch_actual = batch["ground_truth"][DATA].cuda()
         batch_interpolated = batch["interpolated"][DATA].cuda()
-        logit = model(batch_interpolated)
-        if loss_function == "SSIM":
-            loss = -loss_fn(logit,batch_actual)
-            overall_training_loss.append(-loss.item())
-        else:
-            loss = 1-loss_fn(logit, batch_actual)
-            overall_training_loss.append(loss.item())
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+        with autocast():
+            logit = model(batch_interpolated)
+            if loss_function == "SSIM":
+                loss = 1-loss_fn(logit,batch_actual)
+                overall_training_loss.append(loss.item())
+            else:
+                loss = loss_fn(logit, batch_actual)
+                overall_training_loss.append(loss.item())
+
+        scaler.scale(loss).backward()
+        if not (i + 1) % accumulation_steps:
+            opt.zero_grad()
+            opt.step()
+
+
+
     #Train Loss and validation loss seggregation
     training_loss = statistics.mean(overall_training_loss)
     test_network(epoch)
@@ -234,18 +260,18 @@ for epoch in range(Epochs):
     train_writer.add_scalar("training_loss", training_loss, epoch)
     validation_writer.add_scalar("validation_loss", validation_loss, epoch)
     # model saving
-    if loss_function == 'SSIM':
-        if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
-            torch.save({'epoch': epoch,
-                        'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict': opt.state_dict(),
-                        'loss': loss}, os.path.join(r"Models", training_name + ".pth"))
-            print("model_saved")
-    else:
-        if (old_validation_loss == 0) or (old_validation_loss > validation_loss):
-            torch.save({'epoch': epoch,
-                        'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict': opt.state_dict(),
-                        'loss': loss}, os.path.join(r"Models", training_name + ".pth"))
-            print("model_saved")
+    # if loss_function == 'SSIM':
+    #     if (old_validation_loss == 0) or (old_validation_loss < validation_loss):
+    #         torch.save({'epoch': epoch,
+    #                     'model_state_dict': model.state_dict(),
+    #                     'optimizer_state_dict': opt.state_dict(),
+    #                     'loss': loss}, os.path.join(r"Models", training_name + ".pth"))
+    #         print("model_saved")
+    # else:
+    if (old_validation_loss == 0) or (old_validation_loss > validation_loss):
+        torch.save({'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': opt.state_dict(),
+                    'loss': loss}, os.path.join(r"Models", training_name + ".pth"))
+        print("model_saved")
     old_validation_loss = validation_loss

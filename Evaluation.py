@@ -31,28 +31,34 @@ import matplotlib.pyplot as plt
 from RRDB import RRDB
 from tqdm import tqdm
 from SPSR_GG import SPSR_GG
+from unet3DMSS import UNetMSS
+from ShuffleUNet.net import ShuffleUNet
+
 
 
 
 # HELPERS
 
-def show_slices(slices):
+def show_slices(slices,title = None):
     """ Function to display row of image slices """
     fig, axes = plt.subplots(1, len(slices))
     fig.set_size_inches(15, 7.5)
     for i in range(len(slices)):
         axes[i].imshow(slices[i].T, cmap="gray", origin="lower")
+
+    if title:
+        plt.title(title)
     plt.show()
 
 
-def plot_images(inp_np):
+def plot_images(inp_np,title=None):
     slice_0 = inp_np[int(inp_np.shape[0] / 2), :, :]
     slice_1 = inp_np[:, int(inp_np.shape[1] / 2), :]
     slice_2 = inp_np[:, :, int(inp_np.shape[2] / 2)]
-    show_slices([slice_0, slice_1, slice_2])
+    show_slices([slice_0, slice_1, slice_2],title)
 
 
-def get_middle_patch(inp_np, axis=0):
+def get_middle_patch(inp_np, axis=2):
     if axis == 0:
         return inp_np[int(inp_np.shape[0] / 2), :, :]
     elif axis == 1:
@@ -64,7 +70,7 @@ def get_middle_patch(inp_np, axis=0):
 def super_sample(model, patch_loader, aggregator):
     model.eval()
     with torch.no_grad():
-        for batch in (patch_loader):
+        for batch in tqdm(patch_loader):
             inputs = batch['interpolated']['data'].cuda()
             logits = model(inputs)
             location = batch[tio.LOCATION]
@@ -72,22 +78,32 @@ def super_sample(model, patch_loader, aggregator):
     return aggregator
 
 
-def load_model_weights(kind, weight_path):
+def load_model_weights(kind, weight_path = None):
     if kind == 'RRDB':
         model = RRDB(nChannels=1, nDenseLayers=6, nInitFeat=6, GrowthRate=12, featureFusion=True,
                      kernel_config=[3, 3, 3, 3]).cuda()
     elif kind == 'MSF':
         model = MultiScale(nChannels=1, nDenseLayers=6, nInitFeat=6, GrowthRate=12).cuda()
 
+    elif kind == 'UNetMSS':
+        model = UNetMSS(in_channels=1, n_classes=1, depth=3, wf=6, padding=True,
+                        batch_norm=False, up_mode='upconv', dropout=False, mss_level=2,
+                        mss_fromlatent=True, mss_up="trilinear", mss_interpb4=True).cuda()
+
+    elif kind == 'ShuffleUNet':
+        model = ShuffleUNet(d=3, in_ch=1, num_features=64, n_levels=3, out_ch=1, kernel_size=3, stride=1).cuda()
+
     elif kind == 'SPSR':
         model = SPSR_GG(nChannels=1,nDenseLayers=6,nInitFeat=6,GrowthRate=12,kernel_config=[3,3,3,3]).cuda()
-    weights = torch.load(weight_path)
-    model.load_state_dict(weights['model_state_dict'])
+
+    if weight_path != None:
+        weights = torch.load(weight_path)
+        model.load_state_dict(weights['model_state_dict'])
 
     return model
 
 
-def patcher(image_path, fold):
+def patcher(image_path, fold, size = 64):
     DATA_DIR = 'DATA/IXI-T1'
     ground_truth_path = os.path.join(DATA_DIR, "Actual_Images")
     interpolated_path = os.path.join(DATA_DIR, f"Interpolated/{fold}")
@@ -101,7 +117,7 @@ def patcher(image_path, fold):
 
     sample = test_ds[0]
 
-    patch_size = 64, 64, 64
+    patch_size = size, size, size
     patch_overlap = 10, 10, 10
 
     grid_sampler = tio.inference.GridSampler(sample, patch_size, patch_overlap)
@@ -211,7 +227,7 @@ if __name__ == "__main__":
             result = {}
             for sample in tqdm(images,position = 0):
                 subject,_,patch_loader,aggregator = patcher(sample,fold)
-                model = load_model_weights(kind = 'RRDB',weight_path = f'Models/singlularModel/Discrete Scaling/SSARAVAN_Densenet_with_fusion_crossResolution_{loss}.pth')
+                model = load_model_weights(kind = 'SPSR',weight_path = f'Models/singlularModel/Discrete Scaling/SSARAVAN_SPSR_crossResolution_SSIM_latest.pth')
                 aggregator = super_sample(model,patch_loader,aggregator)
                 final_image = aggregator.get_output_tensor()
     #             plot_images(final_image.squeeze().numpy())
@@ -220,7 +236,7 @@ if __name__ == "__main__":
             RRDB_metrics['results'] = result
             data = json.dumps(str(RRDB_metrics))
             data_j = json.loads(data)
-            with open(f'results/singularModel/Discrete Scaling/{fold}/RRDB_crossResolution_{loss}_metrics.json','w') as outfile:
+            with open(f'results/singularModel/Discrete Scaling/{fold}/SPSR_crossResolution_{loss}_metrics.json','w') as outfile:
                 json.dump(data_j,outfile)
             print('============================================================================================================')
             print(f'{loss}================{fold}====================DONE!!!!!!!!!!')
