@@ -28,8 +28,21 @@ factor, the UNet consistently obtained the top results. On the other hand, the S
 performed worse. In conclusion, UNet and UNet-MSS achieved overall top performances while
 RRDB performed relatively poorly compared to the other models.
 
+## Installation
+The [environment.yml](environment.yml) file can be used to clone the conda environment used for the development of this project.
+Follow the instructions given below.
+
+```
+>> conda env create --file environment.yml
+>> conda activate s2l8h
+```
+
 ## Pretrained Models
 
 The pretrained models have been uploaded to the huggingface hub and can be found under [SRMRI - 3D CNN pretrained model collections](https://huggingface.co/collections/venkatesh-thiru/srmri-3d-cnn-pretrained-model-collections-66c26c1dcb6aab077492fec3)
+
+## Inferencing
+
+A sample inferencing script can be found in the [notebook](inference/inference_example.ipynb), while the helper functions required for inference can be found in the [utils.py](inference/utils.py)
 
 🚧🚧🚧🚧🚧🚧**UNDER CONSTRUCTION**🚧🚧🚧🚧🚧🚧
