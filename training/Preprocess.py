@@ -76,6 +76,9 @@ def write_data(compressed,scan,new_affine,target_dir):
 
 
 def interpolate_compressed_images(intensity="IXI-T2",fold = "2fold", method='sinc'):
+    '''
+    Performs SINC interpolation on the LR images
+    '''
     ground_dir = os.path.join("DATA",intensity, "Actual_Images")
     scans = os.listdir(ground_dir)
     compressed_dir = os.path.join("DATA",intensity, "Compressed",fold)
